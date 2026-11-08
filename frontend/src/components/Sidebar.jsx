@@ -40,7 +40,7 @@ export default function Sidebar({ provider, connected }) {
           </div>
           <div className="connection-sub">Provider: <b>{provider || 'checking…'}</b></div>
         </div>
-        <div className="sidebar-foot"><Settings2 size={14} /> <span>Local workspace</span><span className="version-tag">v1.0</span></div>
+        <div className="sidebar-foot"><Settings2 size={14} /> <span>Local workspace</span><span className="version-tag">v 1.0.0</span></div>
       </div>
     </aside>
   );
