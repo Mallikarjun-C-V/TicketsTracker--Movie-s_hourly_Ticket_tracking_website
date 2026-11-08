@@ -36,7 +36,7 @@ export default function Sidebar({ provider, connected }) {
         <div className="connection-card">
           <div className="connection-topline">
             <span className={`connection-dot ${connected ? 'online' : ''}`} />
-            <span>{connected ? 'Backend connected' : 'Backend offline'}</span>
+            <span>{connected ? 'connected' : 'offline'}</span>
           </div>
           <div className="connection-sub">Provider: <b>{provider || 'checking…'}</b></div>
         </div>
