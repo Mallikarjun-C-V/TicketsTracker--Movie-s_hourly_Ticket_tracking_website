@@ -7,6 +7,7 @@ import trackerRoutes from './routes/trackerRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
 const app = express();
+app.set('trust proxy', 1);
 
 app.disable('x-powered-by');
 app.use(helmet());
