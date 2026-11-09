@@ -9,7 +9,7 @@ async function start() {
   try {
     await connectDatabase();
     startScheduler();
-    server = app.listen(env.PORT, '127.0.0.1', () => {
+    server = app.listen(env.PORT, '0.0.0.0', () => {
       console.log(`TicketsTracker API listening at http://localhost:${env.PORT}`);
       console.log(`Collection provider: ${env.BMS_PROVIDER}${env.LIVE_PROVIDER_READY ? ' (authorized live mode enabled)' : ''}`);
     });
