@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { env } from './config/env.js';
 import trackerRoutes from './routes/trackerRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { connectDatabase } from './config/database.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -27,6 +28,10 @@ app.use('/api', rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false
 }));
+
+app.use(async (req, res, next) => {
+  try { await connectDatabase(); next(); } catch (e) { next(e); }
+});
 
 // Health check and Vercel server region verification
 app.get('/api/health', (req, res) => {
