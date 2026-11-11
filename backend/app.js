@@ -1,4 +1,3 @@
-
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -7,7 +6,7 @@ import { env } from './config/env.js';
 import trackerRoutes from './routes/trackerRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { connectDatabase } from './config/database.js';
-
+import { fetchLastHourTickets } from './scraper/httpFetch.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -29,6 +28,14 @@ app.use('/api', rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false
 }));
+
+app.get('/api/debug/bms', async (req, res) => {
+  try {
+    res.json(await fetchLastHourTickets('https://in.bookmyshow.com/movies/bengaluru/ramayana/ET00451914'));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+});
 
 app.use(async (req, res, next) => {
   try { await connectDatabase(); next(); } catch (e) { next(e); }
