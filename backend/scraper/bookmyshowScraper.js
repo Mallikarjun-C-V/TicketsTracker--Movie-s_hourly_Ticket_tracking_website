@@ -142,7 +142,6 @@ export class AuthorizedBookMyShowProvider {
         return { success: false, errorCode: error.code, errorMessage: error.message };
       }
       const message = error?.message || 'The authorized page could not be collected.';
-      console.error('[bms] collect failed:', error);
       const isTimeout = /timeout/i.test(message);
       return {
         success: false,
