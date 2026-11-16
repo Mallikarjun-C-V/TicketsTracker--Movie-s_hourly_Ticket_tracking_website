@@ -5,6 +5,8 @@ function formatDate(value, timezone) {
 }
 
 export default function History({ trackers, selectedId, onSelect }) {
+  const newestFirst = [...trackers].sort((a, b) => new Date(b.startedAt || b.createdAt).getTime() - new Date(a.startedAt || a.createdAt).getTime());
+
   return (
     <section className="panel history-panel" id="history">
       <div className="panel-heading history-heading">
@@ -13,7 +15,7 @@ export default function History({ trackers, selectedId, onSelect }) {
       </div>
       {trackers.length ? (
         <div className="history-list">
-          {trackers.map((tracker) => (
+          {newestFirst.map((tracker) => (
             <button className={`history-item ${selectedId === tracker._id ? 'selected' : ''}`} key={tracker._id} onClick={() => onSelect(tracker._id)}>
               <div className="history-movie-icon"><Film size={17} /></div>
               <div className="history-main"><strong>{tracker.movieLabel || 'Untitled movie tracker'}</strong><span><CalendarDays size={12} /> {formatDate(tracker.startedAt, tracker.timezone)} <i /> <Clock3 size={12} /> {tracker.pollingIntervalMinutes >= 60 ? `${tracker.pollingIntervalMinutes / 60}h interval` : `${tracker.pollingIntervalMinutes}m interval`}</span></div>
