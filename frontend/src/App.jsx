@@ -5,6 +5,7 @@ import StatCard from './components/StatCard.jsx';
 import TrackerForm from './components/TrackerForm.jsx';
 import ActiveTracker from './components/ActiveTracker.jsx';
 import Timeline from './components/Timeline.jsx';
+import HourlyAnalysis from './components/HourlyAnalysis.jsx';
 import History from './components/History.jsx';
 import {
   addManualObservation,
@@ -189,7 +190,7 @@ export default function App() {
 
           {!connected && <div className="connection-alert"><AlertCircle size={17} /><div><strong>Could not reach the backend</strong><span>Start the Express server at http://localhost:5000. Your tracker data remains in MongoDB.</span></div><button onClick={() => refreshDashboard(true)}>Retry <ArrowUpRight size={14} /></button></div>}
 
-          <section className="dashboard-grid">
+          <section className="dashboard-grid" id="trackers">
             <TrackerForm onCreate={handleCreate} busy={busy || !connected} minInterval={health?.minimumPollingIntervalMinutes || 10} provider={provider} defaultTimezone={health?.defaultTimezone || 'Asia/Kolkata'} />
             <ActiveTracker
               tracker={selectedTracker}
@@ -202,7 +203,8 @@ export default function App() {
             />
           </section>
 
-          <Timeline tracker={selectedTracker} snapshots={snapshots} onExport={handleExport} />
+          <Timeline tracker={selectedTracker} snapshots={snapshots} attempts={attempts} onExport={handleExport} />
+          <HourlyAnalysis tracker={selectedTracker} snapshots={snapshots} />
           <History trackers={trackers} selectedId={selectedId} onSelect={setSelectedId} />
 
           <footer className="page-footer"><span>TicketsTracker <b>•</b> Focused ticket-count monitoring</span><span><CircleHelp size={13} /> Rolling observations are not cumulative sales totals.</span></footer>
