@@ -66,7 +66,10 @@ export default function ActiveTracker({ tracker, snapshots, attempts, onAction, 
   }
 
   const failedAttempts = attempts.filter((attempt) => attempt.status === 'FAILED').length;
-  const latest = snapshots[snapshots.length - 1];
+  const latest = snapshots.reduce((newest, snapshot) => {
+    if (!newest) return snapshot;
+    return new Date(snapshot.observedAt).getTime() > new Date(newest.observedAt).getTime() ? snapshot : newest;
+  }, null);
   const canPause = tracker.status === 'RUNNING';
   const canResume = tracker.status === 'PAUSED';
   const canStop = ['RUNNING', 'PAUSED'].includes(tracker.status);
