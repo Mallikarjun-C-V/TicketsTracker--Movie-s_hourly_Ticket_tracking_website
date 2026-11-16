@@ -1,9 +1,10 @@
-import { Activity, Clock3, Film, LayoutDashboard, Settings2 } from 'lucide-react';
+import { Activity, BarChart3, Clock3, Film, LayoutDashboard, Settings2 } from 'lucide-react';
 
 const links = [
   { label: 'Overview', icon: LayoutDashboard, target: 'overview', active: true },
   { label: 'Trackers', icon: Film, target: 'trackers' },
   { label: 'Observations', icon: Activity, target: 'timeline' },
+  { label: 'Hourly analysis', icon: BarChart3, target: 'hourly-analysis' },
   { label: 'Session history', icon: Clock3, target: 'history' }
 ];
 
@@ -36,7 +37,7 @@ export default function Sidebar({ provider, connected }) {
         <div className="connection-card">
           <div className="connection-topline">
             <span className={`connection-dot ${connected ? 'online' : ''}`} />
-            <span>{connected ? 'connected' : 'offline'}</span>
+            <span>{connected ? 'Backend connected' : 'Backend offline'}</span>
           </div>
           <div className="connection-sub">Provider: <b>{provider || 'checking…'}</b></div>
         </div>
