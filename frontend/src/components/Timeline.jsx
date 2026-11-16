@@ -1,4 +1,5 @@
 import { Activity, ArrowDownToLine, Clock3, Info } from 'lucide-react';
+import { mapFailedAttemptsToSnapshots, sortSnapshotsNewestFirst } from './analytics.js';
 
 function formatTime(value, timezone) {
   return new Intl.DateTimeFormat('en-IN', { timeZone: timezone || 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(value));
@@ -8,11 +9,24 @@ function formatObserved(value, timezone) {
   return new Intl.DateTimeFormat('en-IN', { timeZone: timezone || 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(value));
 }
 
-export default function Timeline({ tracker, snapshots, onExport }) {
+const numberFormat = new Intl.NumberFormat('en-IN');
+
+function FailedAttemptsCell({ details }) {
+  if (!details) return <span className="attempt-count unavailable">Not available</span>;
+  if (details.boundaryUnknown) {
+    return <span className="attempt-count partial" title="The API returned only the latest 100 attempts, so earlier failures may be missing.">{details.failedCount ? `≥ ${details.failedCount}*` : 'Unknown*'}</span>;
+  }
+  return <span className={`attempt-count ${details.failedCount ? 'has-failures' : 'no-failures'}`}>{details.failedCount}</span>;
+}
+
+export default function Timeline({ tracker, snapshots, attempts = [], onExport }) {
+  const newestFirst = sortSnapshotsNewestFirst(snapshots);
+  const { bySnapshotId: failedBeforeSuccess, historyMayBeTruncated } = mapFailedAttemptsToSnapshots(attempts, snapshots);
+
   return (
     <section className="panel timeline-panel" id="timeline">
       <div className="panel-heading timeline-heading">
-        <div><div className="eyebrow">OBSERVATION LOG <span className="eyebrow-line" /></div><h2>Ticket timeline</h2><p>Every row is a separate snapshot of the previous 60 minutes.</p></div>
+        <div><div className="eyebrow">OBSERVATION LOG <span className="eyebrow-line" /></div><h2>Ticket timeline</h2><p>Newest successful observations first, followed by older readings.</p></div>
         <button className="outline-button" onClick={onExport} disabled={!tracker || snapshots.length === 0}><ArrowDownToLine size={15} /> Export CSV</button>
       </div>
 
@@ -21,14 +35,15 @@ export default function Timeline({ tracker, snapshots, onExport }) {
       {snapshots.length > 0 ? (
         <div className="table-scroll">
           <table className="observation-table">
-            <thead><tr><th>NO.</th><th>ESTIMATED ONE-HOUR PERIOD</th><th>TICKETS SOLD</th><th>OBSERVATION TIME</th></tr></thead>
+            <thead><tr><th>NO.</th><th>ESTIMATED ONE-HOUR PERIOD</th><th>TICKETS SOLD</th><th>OBSERVATION TIME</th><th>FAILED ATTEMPTS BEFORE SUCCESS</th></tr></thead>
             <tbody>
-              {snapshots.map((snapshot, index) => (
-                <tr key={snapshot._id}>
+              {newestFirst.map((snapshot, index) => (
+                <tr key={snapshot._id || snapshot.observedAt}>
                   <td><span className="row-number">{String(index + 1).padStart(2, '0')}</span></td>
                   <td><div className="period-cell"><Clock3 size={14} /><span>{formatTime(snapshot.windowStart, tracker?.timezone)} <i>—</i> {formatTime(snapshot.windowEnd, tracker?.timezone)}</span></div></td>
-                  <td><div className="count-cell"><strong>{snapshot.ticketsSold == null ? 'Needs review' : new Intl.NumberFormat('en-IN').format(snapshot.ticketsSold)}</strong><span className={`precision ${String(snapshot.precision || 'REVIEW').toLowerCase()}`}>{snapshot.precision === 'APPROXIMATE' ? '≈' : snapshot.precision === 'REVIEW' || !snapshot.precision ? 'Review' : 'Exact'}</span>{snapshot.sourceProvider === 'MOCK' && <span className="sample-chip">SAMPLE</span>}</div></td>
+                  <td><div className="count-cell"><strong>{snapshot.ticketsSold == null ? 'Needs review' : numberFormat.format(snapshot.ticketsSold)}</strong><span className={`precision ${String(snapshot.precision || 'REVIEW').toLowerCase()}`}>{snapshot.precision === 'APPROXIMATE' ? '≈' : snapshot.precision === 'REVIEW' || !snapshot.precision ? 'Review' : 'Exact'}</span>{snapshot.sourceProvider === 'MOCK' && <span className="sample-chip">SAMPLE</span>}</div></td>
                   <td><span className="observed-cell">{formatObserved(snapshot.observedAt, tracker?.timezone)}</span></td>
+                  <td><FailedAttemptsCell details={failedBeforeSuccess.get(snapshot._id || `${new Date(snapshot.observedAt).getTime()}`)} /></td>
                 </tr>
               ))}
             </tbody>
@@ -42,7 +57,12 @@ export default function Timeline({ tracker, snapshots, onExport }) {
           <div className="timeline-empty-note"><Info size={13} /> Failed attempts are recorded separately and never shown as zero-ticket observations.</div>
         </div>
       )}
-      {snapshots.length > 0 && <div className="timeline-footer"><span><Info size={13} /> Each count covers an estimated rolling 60-minute window, not lifetime sales.</span><span>Newest observations appear at the bottom.</span></div>}
+      {snapshots.length > 0 && (
+        <div className="timeline-footer">
+          <span><Info size={13} /> Each count covers an estimated rolling 60-minute window, not lifetime sales.</span>
+          <span>{historyMayBeTruncated ? '* ≥ means the attempt history may be truncated (latest 100 only).' : 'Failed attempts are counted since the previous successful collection.'}</span>
+        </div>
+      )}
     </section>
   );
 }
