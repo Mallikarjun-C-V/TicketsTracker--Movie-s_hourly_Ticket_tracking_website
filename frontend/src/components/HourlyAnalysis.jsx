@@ -182,17 +182,49 @@ function HourlyLineChart({ buckets, timezone }) {
   const coveragePercent = expectedReadings ? Math.min(100, (totalReadings / expectedReadings) * 100) : 0;
 
   const svgWidth = 1280;
-  const svgHeight = 520;
   const margin = { left: 92, right: 30, top: 42 };
-  const plotBottom = 354;
-  const plotTop = margin.top;
   const plotWidth = svgWidth - margin.left - margin.right;
-  const plotHeight = plotBottom - plotTop;
-  const coverageTop = 392;
-  const coverageBottom = 447;
   const xFor = (index) => visibleBuckets.length <= 1
     ? margin.left + plotWidth / 2
     : margin.left + (index / (visibleBuckets.length - 1)) * plotWidth;
+  const selectedBucket = hoveredIndex === null ? null : visibleBuckets[hoveredIndex];
+  const compareBuckets = compareMode && selectedBucket
+    ? visibleBuckets
+      .map((bucket, index) => ({ bucket, index }))
+      .filter(({ bucket }) => getLocalClockKey(bucket.start, timezone) === getLocalClockKey(selectedBucket.start, timezone))
+    : [];
+  const compareClockLabel = selectedBucket ? formatHour(selectedBucket.start, timezone) : '';
+
+  // Give every same-time comparison card its own horizontal position and,
+  // where dates are close together on a long range, a collision-free row.
+  const compareCardWidth = 132;
+  const compareCardGap = 9;
+  const compareLaneEnds = [];
+  const compareCardLayouts = compareBuckets.map(({ bucket, index }, compareIndex) => {
+    const markerX = xFor(index);
+    const cardLeft = markerX - compareCardWidth / 2;
+    let lane = compareLaneEnds.findIndex((lastRight) => cardLeft >= lastRight + compareCardGap);
+    if (lane === -1) {
+      lane = compareLaneEnds.length;
+      compareLaneEnds.push(markerX + compareCardWidth / 2);
+    } else {
+      compareLaneEnds[lane] = markerX + compareCardWidth / 2;
+    }
+    return { bucket, index, compareIndex, markerX, lane };
+  });
+  const compareHeaderHeight = compareMode && selectedBucket
+    ? Math.max(1, compareLaneEnds.length) * 68 + 8
+    : 0;
+
+  // The SVG plot is shifted down in compare mode to create a dedicated card
+  // strip, so the individual date cards never cover the plotted data.
+  const compareHeaderShift = Math.max(0, compareHeaderHeight - margin.top);
+  const svgHeight = 520 + compareHeaderShift;
+  const plotBottom = 354;
+  const plotTop = margin.top;
+  const plotHeight = plotBottom - plotTop;
+  const coverageTop = 392;
+  const coverageBottom = 447;
 
   const minValue = Math.min(...numericValues);
   const maxValue = Math.max(...numericValues);
@@ -211,16 +243,9 @@ function HourlyLineChart({ buckets, timezone }) {
     xTickIndexes.add(tickCount === 1 ? 0 : Math.round((i / (tickCount - 1)) * (visibleBuckets.length - 1)));
   }
   const barWidth = Math.max(3, Math.min(24, (plotWidth / Math.max(1, visibleBuckets.length)) * 0.58));
-  const selectedBucket = hoveredIndex === null ? null : visibleBuckets[hoveredIndex];
   const selectedX = hoveredIndex === null ? null : xFor(hoveredIndex);
   const selectedY = selectedBucket?.average === null || !selectedBucket ? null : yFor(selectedBucket.average);
   const tooltipLeft = selectedX === null ? 50 : Math.min(88, Math.max(8, (selectedX / svgWidth) * 100));
-  const compareBuckets = compareMode && selectedBucket
-    ? visibleBuckets
-      .map((bucket, index) => ({ bucket, index }))
-      .filter(({ bucket }) => getLocalClockKey(bucket.start, timezone) === getLocalClockKey(selectedBucket.start, timezone))
-    : [];
-  const compareClockLabel = selectedBucket ? formatHour(selectedBucket.start, timezone) : '';
 
   const handlePointerMove = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -301,13 +326,10 @@ function HourlyLineChart({ buckets, timezone }) {
       </div>
 
       <div className="market-chart-stage">
-        {selectedBucket && (
+        {selectedBucket && !compareMode && (
           <div
             className={`market-hover-card${tooltipLeft > 68 ? ' to-left' : ''}`}
-            style={{
-              left: `${tooltipLeft}%`,
-              ...(compareMode ? { maxHeight: 'min(360px, 58vh)', overflowY: 'auto', minWidth: '210px' } : {})
-            }}
+            style={{ left: `${tooltipLeft}%` }}
           >
             <div className="market-hover-date">{formatDate(selectedBucket.start, timezone)} · {formatHour(selectedBucket.start, timezone)}</div>
             {selectedBucket.average === null ? (
@@ -315,27 +337,66 @@ function HourlyLineChart({ buckets, timezone }) {
             ) : (
               <><strong>{numberFormat.format(selectedBucket.average)}</strong><span>Average rolling 60-minute count</span><div className="market-hover-meta"><span>{selectedBucket.validCount} / {selectedBucket.expectedReadings} readings</span><b>{selectedBucket.coverage.toFixed(0)}% coverage</b></div></>
             )}
-            {compareMode && (
-              <div style={{ borderTop: '1px solid #f0e5df', marginTop: 7, paddingTop: 7 }}>
-                <div style={{ color: '#8d766b', fontSize: 8, fontWeight: 900, letterSpacing: '.7px', marginBottom: 6 }}>SAME-TIME COMPARISON · {compareClockLabel}</div>
-                {compareBuckets.map(({ bucket, index }) => {
-                  const color = index === hoveredIndex
-                    ? compareMarkerPalette[0]
-                    : compareMarkerPalette[(compareBuckets.findIndex((item) => item.index === index) % (compareMarkerPalette.length - 1)) + 1];
-                  return (
-                    <div key={bucket.start} style={{ display: 'grid', gridTemplateColumns: '8px minmax(0, 1fr) auto', alignItems: 'center', gap: 6, padding: '4px 0', borderBottom: '1px solid rgba(240,229,223,.65)' }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
-                      <span style={{ color: '#77665e', fontSize: 9, whiteSpace: 'nowrap' }}>{formatDate(bucket.start, timezone)}{index === hoveredIndex ? ' · selected' : ''}</span>
-                      <strong style={{ color: bucket.average === null ? '#a8753d' : '#a94d2c', fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                        {bucket.average === null ? 'NO DATA' : numberFormat.format(bucket.average)}
-                      </strong>
-                    </div>
-                  );
-                })}
-                {compareBuckets.length <= 1 && <span style={{ display: 'block', color: '#7d8a90', fontSize: 8, paddingTop: 4 }}>No other matching date in this selected range.</span>}
-                <span style={{ display: 'block', color: '#8d766b', fontSize: 8, paddingTop: 6 }}>Values are hourly averages of recorded rolling 60-minute counts.</span>
-              </div>
-            )}
+          </div>
+        )}
+
+        {compareMode && selectedBucket && (
+          <div
+            className="market-compare-card-layer"
+            style={{ position: 'absolute', inset: '0 auto auto 0', width: '100%', minWidth: '820px', height: '100%', zIndex: 5, pointerEvents: 'none' }}
+          >
+          {compareCardLayouts.map(({ bucket, index, compareIndex, markerX, lane }) => {
+          const markerColor = index === hoveredIndex
+            ? '#ef6a3c'
+            : compareMarkerPalette[(compareIndex % (compareMarkerPalette.length - 1)) + 1];
+          const leftPercent = (markerX / svgWidth) * 100;
+          const edgeTransform = markerX < margin.left + 74
+            ? 'translateX(0)'
+            : markerX > svgWidth - margin.right - 74
+              ? 'translateX(-100%)'
+              : 'translateX(-50%)';
+
+          return (
+            <div
+              key={`compare-card-${bucket.start}`}
+              className="market-compare-point-card"
+              style={{
+                position: 'absolute',
+                zIndex: index === hoveredIndex ? 6 : 5,
+                top: `${((4 + lane * 68) / svgHeight) * 100}%`,
+                left: `${leftPercent}%`,
+                transform: edgeTransform,
+                width: 'clamp(96px, 9.5vw, 124px)',
+                minHeight: '48px',
+                padding: '6px 8px 6px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '3px',
+                border: `1px solid ${index === hoveredIndex ? '#efb69f' : '#eadbd3'}`,
+                borderTop: `3px solid ${markerColor}`,
+                borderRadius: '8px',
+                background: 'rgba(255,255,255,.98)',
+                boxShadow: index === hoveredIndex
+                  ? '0 8px 22px rgba(190,91,52,.18)'
+                  : '0 5px 16px rgba(63,43,33,.11)',
+                pointerEvents: 'none',
+                boxSizing: 'border-box'
+              }}
+            >
+              <span style={{ color: '#806b61', fontSize: '8px', fontWeight: 800, lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+                {formatDate(bucket.start, timezone)}{index === hoveredIndex ? ' · SELECTED' : ''}
+              </span>
+              <strong style={{ color: bucket.average === null ? '#a8753d' : '#c6532d', fontSize: '15px', fontWeight: 900, lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>
+                {bucket.average === null ? 'NO READING' : numberFormat.format(bucket.average)}
+              </strong>
+              <span style={{ color: '#8b817b', fontSize: '7px', lineHeight: 1.2 }}>
+                {bucket.average === null
+                  ? 'No observation recorded'
+                  : `${bucket.validCount} reading(s) · ${bucket.coverage.toFixed(0)}% coverage`}
+              </span>
+            </div>
+          );
+          })}
           </div>
         )}
         <svg
@@ -358,6 +419,7 @@ function HourlyLineChart({ buckets, timezone }) {
             </linearGradient>
           </defs>
 
+          <g transform={compareHeaderShift ? `translate(0 ${compareHeaderShift})` : undefined}>
           <text x="22" y="24" className="market-svg-label">ROLLING 60-MIN COUNT</text>
           <text x={svgWidth - 24} y="24" textAnchor="end" className="market-svg-label">{scale === 'auto' ? 'AUTO SCALE' : 'ZERO BASELINE'}</text>
 
@@ -405,18 +467,20 @@ function HourlyLineChart({ buckets, timezone }) {
             {selectedY !== null && <><line x1={margin.left} x2={svgWidth - margin.right} y1={selectedY} y2={selectedY} className="horizontal-crosshair" /><circle cx={selectedX} cy={selectedY} r="8" className="market-crosshair-point" /></>}
           </g>}
 
-          {compareMode && compareBuckets.map(({ bucket, index }, compareIndex) => {
+          {compareMode && compareCardLayouts.map(({ bucket, index, compareIndex, lane }) => {
             const x = xFor(index);
             const color = index === hoveredIndex
               ? compareMarkerPalette[0]
               : compareMarkerPalette[(compareIndex % (compareMarkerPalette.length - 1)) + 1];
             const markerY = bucket.average === null ? null : yFor(bucket.average);
+            const cardBottom = 4 + lane * 68 + 48;
+            const lineStartY = cardBottom - compareHeaderShift;
             return (
               <g key={`compare-marker-${bucket.start}`} pointerEvents="none">
                 <line
                   x1={x}
                   x2={x}
-                  y1={plotTop}
+                  y1={lineStartY}
                   y2={showCoverage ? coverageBottom : plotBottom}
                   stroke={color}
                   strokeWidth={index === hoveredIndex ? 2.2 : 1.5}
@@ -452,6 +516,7 @@ function HourlyLineChart({ buckets, timezone }) {
               <text x={xFor(index)} y="499" textAnchor="middle" className="market-axis-time">{formatChartAxisTime(bucket.start, timezone)}</text>
             </g>;
           })}
+          </g>
         </svg>
       </div>
 
