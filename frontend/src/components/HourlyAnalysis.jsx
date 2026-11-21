@@ -61,6 +61,19 @@ function formatChartAxisTime(value, timezone, includeDate = false) {
   }).format(new Date(value));
 }
 
+function getLocalClockKey(value, timezone) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone || 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(new Date(value));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.hour}:${values.minute}`;
+}
+
+const compareMarkerPalette = ['#ef6a3c', '#c77c55', '#d79b55', '#a66d54', '#e28b69', '#8f7768'];
+
 function getContinuousSegments(buckets, values) {
   const segments = [];
   let current = [];
@@ -126,6 +139,7 @@ function HourlyLineChart({ buckets, timezone }) {
   const [showCoverage, setShowCoverage] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [compareMode, setCompareMode] = useState(false);
 
   useEffect(() => {
     if (!expanded) return undefined;
@@ -201,6 +215,12 @@ function HourlyLineChart({ buckets, timezone }) {
   const selectedX = hoveredIndex === null ? null : xFor(hoveredIndex);
   const selectedY = selectedBucket?.average === null || !selectedBucket ? null : yFor(selectedBucket.average);
   const tooltipLeft = selectedX === null ? 50 : Math.min(88, Math.max(8, (selectedX / svgWidth) * 100));
+  const compareBuckets = compareMode && selectedBucket
+    ? visibleBuckets
+      .map((bucket, index) => ({ bucket, index }))
+      .filter(({ bucket }) => getLocalClockKey(bucket.start, timezone) === getLocalClockKey(selectedBucket.start, timezone))
+    : [];
+  const compareClockLabel = selectedBucket ? formatHour(selectedBucket.start, timezone) : '';
 
   const handlePointerMove = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -262,6 +282,9 @@ function HourlyLineChart({ buckets, timezone }) {
           ))}
         </div>
         <div className="market-toolbar-spacer" />
+        <button type="button" className={`market-tool-button market-toggle-button${compareMode ? ' active' : ''}`} onClick={() => { setCompareMode((value) => !value); setHoveredIndex(null); }} title="Compare the same local clock-hour across all visible dates" aria-pressed={compareMode}>
+          <Crosshair size={12} /> COMPARE
+        </button>
         <button type="button" className={`market-tool-button market-toggle-button${showAverage ? ' active' : ''}`} onClick={() => setShowAverage((value) => !value)} title="Toggle 3-hour moving average">MA 3H</button>
         <button type="button" className={`market-tool-button market-toggle-button${showCoverage ? ' active' : ''}`} onClick={() => setShowCoverage((value) => !value)} title="Toggle observation coverage">Coverage</button>
         <button type="button" className="market-tool-button market-scale-button" onClick={() => setScale((value) => value === 'auto' ? 'zero' : 'auto')} title="Switch vertical scale">{scale === 'auto' ? 'Auto scale' : 'Zero scale'}</button>
@@ -273,17 +296,45 @@ function HourlyLineChart({ buckets, timezone }) {
         <span><i className="legend-mark legend-main" /> Hourly average</span>
         {showAverage && <span><i className="legend-mark legend-average" /> 3-hour moving average</span>}
         {showCoverage && <span><i className="legend-mark legend-coverage" /> Observation coverage</span>}
-        <span className="market-chart-hint"><Crosshair size={12} /> Move pointer over chart for details</span>
+        {compareMode && <span><i className="legend-mark" style={{ background: compareMarkerPalette[0] }} /> Same clock time across visible dates</span>}
+        <span className="market-chart-hint"><Crosshair size={12} /> {compareMode ? (selectedBucket ? `Comparing ${compareClockLabel} · ${compareBuckets.length} date(s)` : 'Hover a time to compare that clock-hour across dates') : 'Move pointer over chart for details'}</span>
       </div>
 
       <div className="market-chart-stage">
         {selectedBucket && (
-          <div className={`market-hover-card${tooltipLeft > 68 ? ' to-left' : ''}`} style={{ left: `${tooltipLeft}%` }}>
+          <div
+            className={`market-hover-card${tooltipLeft > 68 ? ' to-left' : ''}`}
+            style={{
+              left: `${tooltipLeft}%`,
+              ...(compareMode ? { maxHeight: 'min(360px, 58vh)', overflowY: 'auto', minWidth: '210px' } : {})
+            }}
+          >
             <div className="market-hover-date">{formatDate(selectedBucket.start, timezone)} · {formatHour(selectedBucket.start, timezone)}</div>
             {selectedBucket.average === null ? (
               <><strong className="market-hover-missing">NO READING</strong><span>This hour has no recorded observation.</span></>
             ) : (
               <><strong>{numberFormat.format(selectedBucket.average)}</strong><span>Average rolling 60-minute count</span><div className="market-hover-meta"><span>{selectedBucket.validCount} / {selectedBucket.expectedReadings} readings</span><b>{selectedBucket.coverage.toFixed(0)}% coverage</b></div></>
+            )}
+            {compareMode && (
+              <div style={{ borderTop: '1px solid #f0e5df', marginTop: 7, paddingTop: 7 }}>
+                <div style={{ color: '#8d766b', fontSize: 8, fontWeight: 900, letterSpacing: '.7px', marginBottom: 6 }}>SAME-TIME COMPARISON · {compareClockLabel}</div>
+                {compareBuckets.map(({ bucket, index }) => {
+                  const color = index === hoveredIndex
+                    ? compareMarkerPalette[0]
+                    : compareMarkerPalette[(compareBuckets.findIndex((item) => item.index === index) % (compareMarkerPalette.length - 1)) + 1];
+                  return (
+                    <div key={bucket.start} style={{ display: 'grid', gridTemplateColumns: '8px minmax(0, 1fr) auto', alignItems: 'center', gap: 6, padding: '4px 0', borderBottom: '1px solid rgba(240,229,223,.65)' }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
+                      <span style={{ color: '#77665e', fontSize: 9, whiteSpace: 'nowrap' }}>{formatDate(bucket.start, timezone)}{index === hoveredIndex ? ' · selected' : ''}</span>
+                      <strong style={{ color: bucket.average === null ? '#a8753d' : '#a94d2c', fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                        {bucket.average === null ? 'NO DATA' : numberFormat.format(bucket.average)}
+                      </strong>
+                    </div>
+                  );
+                })}
+                {compareBuckets.length <= 1 && <span style={{ display: 'block', color: '#7d8a90', fontSize: 8, paddingTop: 4 }}>No other matching date in this selected range.</span>}
+                <span style={{ display: 'block', color: '#8d766b', fontSize: 8, paddingTop: 6 }}>Values are hourly averages of recorded rolling 60-minute counts.</span>
+              </div>
             )}
           </div>
         )}
@@ -349,10 +400,39 @@ function HourlyLineChart({ buckets, timezone }) {
             </g>
           ))}
 
-          {selectedBucket && selectedX !== null && <g className="market-crosshair">
+          {!compareMode && selectedBucket && selectedX !== null && <g className="market-crosshair">
             <line x1={selectedX} x2={selectedX} y1={plotTop} y2={showCoverage ? coverageBottom : plotBottom} />
             {selectedY !== null && <><line x1={margin.left} x2={svgWidth - margin.right} y1={selectedY} y2={selectedY} className="horizontal-crosshair" /><circle cx={selectedX} cy={selectedY} r="8" className="market-crosshair-point" /></>}
           </g>}
+
+          {compareMode && compareBuckets.map(({ bucket, index }, compareIndex) => {
+            const x = xFor(index);
+            const color = index === hoveredIndex
+              ? compareMarkerPalette[0]
+              : compareMarkerPalette[(compareIndex % (compareMarkerPalette.length - 1)) + 1];
+            const markerY = bucket.average === null ? null : yFor(bucket.average);
+            return (
+              <g key={`compare-marker-${bucket.start}`} pointerEvents="none">
+                <line
+                  x1={x}
+                  x2={x}
+                  y1={plotTop}
+                  y2={showCoverage ? coverageBottom : plotBottom}
+                  stroke={color}
+                  strokeWidth={index === hoveredIndex ? 2.2 : 1.5}
+                  strokeDasharray={index === hoveredIndex ? 'none' : '4 4'}
+                  opacity={index === hoveredIndex ? 0.95 : 0.72}
+                  vectorEffect="non-scaling-stroke"
+                />
+                {markerY !== null && (
+                  <>
+                    <circle cx={x} cy={markerY} r={index === hoveredIndex ? 8 : 6} fill={color} stroke="#fff" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                    <line x1={x - 5} x2={x + 5} y1={markerY} y2={markerY} stroke="#fff" strokeWidth="1.2" vectorEffect="non-scaling-stroke" />
+                  </>
+                )}
+              </g>
+            );
+          })}
 
           {showCoverage && <g>
             <line x1={margin.left} x2={svgWidth - margin.right} y1={coverageTop - 8} y2={coverageTop - 8} className="market-coverage-divider" />
